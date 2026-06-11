@@ -1,0 +1,5 @@
+services:
+  team:
+    build: .
+    env_file: .env
+    command: uv run python -m kaldera.cli

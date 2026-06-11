@@ -1,0 +1,28 @@
+{
+  "scenarios": [
+    {
+      "id": "happy_path",
+      "initial_context": {
+        "topic": "lancement produit",
+        "required_steps": ["RESEARCH", "DRAFT", "REVIEW", "FINALIZE"]
+      },
+      "expected": {
+        "final_status": "done",
+        "max_steps": 5,
+        "artifacts": ["research", "draft", "review", "final"]
+      }
+    },
+    {
+      "id": "research_only",
+      "initial_context": {
+        "topic": "note rapide",
+        "required_steps": ["RESEARCH", "FINALIZE"]
+      },
+      "expected": {
+        "final_status": "done",
+        "max_steps": 4,
+        "artifacts": ["research", "final"]
+      }
+    }
+  ]
+}
