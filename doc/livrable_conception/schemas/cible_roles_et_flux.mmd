@@ -1,0 +1,40 @@
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Arial", "fontSize": "15px", "lineColor": "#5B6275", "edgeLabelBackground": "#FFFFFF"}, "flowchart": {"wrappingWidth": 420}}}%%
+flowchart TD
+  A(["Demande<br/>sujet + étapes"]):::io --> V{{"<b>A · Avant</b> · le chef vérifie la demande<br/>sujet, libellés, doublons, FINALIZE en dernier,<br/>entrées, nombre d'étapes, équipe complète"}}:::orch
+  V -- "valide" --> G{"<b>B · Pendant</b><br/>reste-t-il<br/>une étape ?"}:::orch
+  G -- "oui" --> D["le chef confie l'étape courante<br/>à son <b>unique propriétaire</b><br/>(garde-fou : limite d'étapes vérifiée avant)"]:::orch
+  D -- "limite atteinte" --> X5["aborted<br/>step_limit_reached"]:::stop
+
+  D -- "RESEARCH" --> R["<b>researcher</b> · RESEARCH<br/>lit : le sujet<br/>écrit : research<br/><i>jamais : rédiger, relire, clore</i>"]:::agent
+  D -- "DRAFT" --> W["<b>writer</b> · DRAFT<br/>lit : research<br/>écrit : draft<br/><i>jamais : relire, modifier research</i>"]:::agent
+  D -- "REVIEW" --> RV["<b>reviewer</b> · REVIEW<br/>lit : draft<br/>écrit : review (version corrigée)<br/><i>jamais : modifier draft, renvoyer au writer</i>"]:::agent
+  D -- "FINALIZE" --> F["<b>finalizer</b> · FINALIZE<br/>lit : review, sinon draft, sinon research<br/>écrit : final + statut done<br/><i>seul à clore le flux</i>"]:::agent
+
+  R -- "rend la main" --> RC
+  W -- "rend la main" --> RC
+  RV -- "rend la main" --> RC
+  F -- "rend la main" --> RC
+  RC{{"le chef <b>réceptionne</b><br/>compare au registre d'écriture de l'état partagé :<br/>artefact attendu écrit, rien d'autre touché ?"}}:::orch
+
+  RC -- "étape hors rôle" --> X2["aborted<br/>role_violation"]:::stop
+  RC -- "budget dépassé" --> X3["aborted<br/>budget_exceeded"]:::stop
+  RC -- "artefact non conforme" --> X4["aborted<br/>reception_refused"]:::stop
+  RC -- "conforme" --> AV["le chef avance à l'étape suivante<br/>jamais la même"]:::orch
+  AV --> G
+
+  G -- "non" --> E{"<b>C · À la fin</b><br/>clos par le<br/>finalizer ?"}:::orch
+  E -- "oui" --> END(["END · done"]):::ok
+  E -- "non" --> X6["aborted<br/>missing_closure"]:::stop
+  V -- "échec" --> X1["aborted<br/>invalid_demand + motif"]:::stop
+
+  REG["<b>Règles de l'orchestration cible</b><br/>1 · une étape, un seul agent · 2 · un artefact, un seul propriétaire ; done réservé au finalizer<br/>3 · le rôle est déclaré une seule fois : table, refus, réception et prompt en découlent<br/>4 · chaque sub-agent rend la main au chef : aucun transfert d'agent à agent<br/>5 · aucune relance : tout arrêt est définitif, avec son code<br/>6 · journal : qui, quelle étape, quoi, pour chaque agent et chaque décision du chef"]:::note
+  LEG["<b>Légende</b> · violet : le chef (superviseur) · vert : un sub-agent · rouge : arrêt aborted · vert clair : fin normale"]:::note
+  X4 ~~~ REG
+  REG ~~~ LEG
+
+  classDef orch fill:#34307A,stroke:#34307A,color:#FFFFFF
+  classDef agent fill:#E6F4F2,stroke:#0F766E,color:#0F3F3A,stroke-width:1.5px
+  classDef stop fill:#FDECEC,stroke:#B91C1C,color:#7F1D1D,stroke-width:1.5px
+  classDef ok fill:#E7F6EC,stroke:#15803D,color:#14532D,stroke-width:2px
+  classDef io fill:#E9ECF2,stroke:#6B7280,color:#1F2330
+  classDef note fill:#FFF7E6,stroke:#B45309,color:#5A3A06
