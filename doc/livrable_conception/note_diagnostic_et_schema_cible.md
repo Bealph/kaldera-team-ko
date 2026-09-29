@@ -27,6 +27,8 @@ donc levés un par un, en mémoire, sans modifier le dépôt. Le résultat le pl
 plantages levés, le scénario principal finit en `done`, dans le budget, **sans qu'aucune relecture
 ait eu lieu**.
 
+![Diagnostic : état actuel annoté](schemas/01_diagnostic_etat_actuel.png)
+
 | N° | Endroit                  | Ce qui se passe                                                                                                                                          | Cause dans le code                                                                                                                                   | Preuve                                                                                                                                                                                          |
 | -- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ①  | **Boucle** (latente)     | un agent qui n'avance pas est rappelé 50 fois au lieu de `max_steps` ; ne se déclenche pas sur les scénarios fournis, seulement avec un agent défaillant | la limite est calculée mais jamais lue, et le chef ne vérifie pas que l'étape avance (`runner.py:26-39`)                                             | `test_step_budget_is_enforced` : 50 étapes pour 4 au plus attendues                                                                                                                             |
@@ -74,6 +76,8 @@ l'a déjà eue : c'est ce qui ferme la boucle du point ①.
 
 ## 2. Détail · les rôles
 
+![Schéma cible : rôles et frontières](schemas/02_cible_roles.png)
+
 - **Une fiche de poste par agent** : une étape, ce qu'il lit, l'artefact dont il est le seul
   propriétaire, et ce qu'il ne fait jamais.
 - **Le chef ne produit rien.** Il confie l'étape, **réceptionne** (l'artefact attendu est écrit, et
@@ -89,6 +93,8 @@ l'a déjà eue : c'est ce qui ferme la boucle du point ①.
 ---
 
 ## 3. Détail · le flux
+
+![Schéma cible : flux conforme à la spécification](schemas/03_cible_flux.png)
 
 Le flux se déroule en trois temps :
 
@@ -194,6 +200,7 @@ raison**. Les tests sont rangés sur quatre niveaux :
 - **Notes détaillées, point par point**, dans `doc/` : `conception_point_1_boucles_et_conflits.md`,
   `conception_point_2_roles_et_frontieres.md`, `conception_point_3_conformite_specification.md`,
   `conception_point_4_detection_par_les_tests.md`.
-- **Source du schéma** : `schemas/cible_roles_et_flux.mmd`, au format Mermaid, qui s'affiche
-  directement sur GitHub. Le `.png` est généré avec `@mermaid-js/mermaid-cli` (version 11.17.0) :
+- **Schémas** : `schemas/01_diagnostic_etat_actuel.png`, `02_cible_roles.png`, `03_cible_flux.png`
+  et `cible_roles_et_flux.png`. La source Mermaid du schéma cible unique est
+  `schemas/cible_roles_et_flux.mmd`, qui s'affiche directement sur GitHub. Le `.png` est généré avec `@mermaid-js/mermaid-cli` (version 11.17.0) :
   `mmdc -i cible_roles_et_flux.mmd -o cible_roles_et_flux.png -b white -s 2 -w 1600`.
