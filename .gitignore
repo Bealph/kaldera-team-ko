@@ -36,3 +36,6 @@ uv.lock
 # Docker
 .docker-data/
 *.log
+
+# Serena
+.serena
