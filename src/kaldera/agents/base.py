@@ -41,7 +41,7 @@ class Agent:
     def accepts(self, step: Step | None) -> bool:
         return step in self.handles
 
-    def run(self, state: TeamState) -> None:
+    def run(self, state: TeamState, llm: object | None = None) -> None:
         step = state.current_step()
         if step is None or not self.accepts(step):
             raise RoleViolation(f"{self.name} ne traite pas l'étape {step}")
@@ -51,8 +51,24 @@ class Agent:
             raise BudgetExceeded(
                 f"{self.name} a consommé {used} tokens pour un budget de {self.token_budget}"
             )
-        self.act(state, step)
+        if llm is not None:
+            self.act_with_llm(state, step, llm)
+        else:
+            self.act(state, step)
         logging_utils.record(state, self.name, f"a traité {step.value}", step)
 
     def act(self, state: TeamState, step: Step) -> None:
         raise NotImplementedError
+
+    def render_prompt(self, state: TeamState) -> str:
+        context = "\n".join(f"- {key} : {value}" for key, value in sorted(state.artifacts.items()))
+        return (
+            f"{self.system_prompt}\n\n"
+            f"Sujet : {state.topic}\n"
+            f"Artefacts disponibles :\n{context or '(aucun)'}\n\n"
+            f"Produis uniquement le contenu de l'artefact « {self.produces} »."
+        )
+
+    def act_with_llm(self, state: TeamState, step: Step, llm: object) -> None:
+        response = llm.invoke(self.render_prompt(state))  # type: ignore[attr-defined]
+        state.artifacts[self.produces] = response.content

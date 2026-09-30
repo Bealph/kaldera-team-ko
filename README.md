@@ -16,7 +16,9 @@ Orchestrateur d'une équipe d'agents LLM (`researcher`, `writer`, `reviewer`,
 
 - Python 3.11 (uv)
 - LangChain / langchain-core 0.3.x
-- langchain-azure-ai 0.1.x (Kimi-K2.6)
+- langchain-openai 0.3.x (appel réel, endpoint Azure AI compatible OpenAI)
+- langchain-azure-ai 0.1.x (déclaré, non utilisé : cible l'API azure-ai-inference,
+  incompatible avec l'endpoint `/openai/v1` fourni)
 - LangGraph 0.2.x
 - pytest 8.x
 
@@ -53,11 +55,19 @@ make down       # stoppe le service docker
 
 ## Known issues
 
-- Le chemin « live » (`graph.py`, LangGraph) est encore une coquille : il se compile mais ne câble
-  aucun flux. Le runner déterministe (`runner.py`) est la référence de comportement.
-- Aucun vrai LLM n'a été testé ; le budget de tokens repose sur un coût fixe par étape.
-- `max_steps` est lu dans `expected` des scénarios, alors que `specs/flow_spec.md` le place dans la
-  demande (écart signalé, scénarios non modifiés).
+Les trois limites connues de la PR précédente sont résolues :
+
+- Le chemin « live » (`graph.py`, LangGraph) câble un flux réel : mêmes garde-fous que le
+  runner déterministe (rôle, budget, limite d'étapes, clôture par le finalizer), un vrai appel
+  LLM par étape. Voir `run_live()` et `tests/test_graph.py`.
+- Un vrai LLM est testé (`tests/test_graph.py::test_run_live_completes_with_a_real_llm`,
+  se saute si `AZURE_AI_ENDPOINT`/`AZURE_AI_API_KEY`/`AZURE_AI_MODEL` sont absents).
+- `max_steps` est lu dans la demande (`initial_context`) en priorité, conformément à
+  `specs/flow_spec.md`, avec repli sur `expected` puis sur une limite par défaut — sans modifier
+  les scénarios fournis.
+
+Reste ouvert : le budget de tokens reste un coût fixe par étape (`step_cost`), pas un compte
+réel des tokens consommés par le LLM.
 
 Les boucles, le conflit sur `REVIEW` et les garde-fous ont été corrigés : voir
 `doc/developpement/choix_de_developpement.md`. Pour prouver que chaque défaut corrigé serait

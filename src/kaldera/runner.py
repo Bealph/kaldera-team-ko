@@ -53,11 +53,16 @@ def run_scenario(
 ) -> TeamState:
     state = initial_state if initial_state is not None else TeamState()
     registry = agents_by_name if agents_by_name is not None else AGENTS_BY_NAME
+    # La spécification place `max_steps` dans la demande (`initial_context`) ; les scénarios
+    # fournis le placent dans `expected`. On lit la demande en priorité, sans modifier les
+    # scénarios fournis (D9), et `expected` reste le repli pour ceux-ci.
     limit = (
         max_iterations
         if max_iterations is not None
-        else scenario.get("expected", {}).get("max_steps")
+        else scenario.get("initial_context", {}).get("max_steps")
     )
+    if limit is None:
+        limit = scenario.get("expected", {}).get("max_steps")
     if limit is None:
         limit = HARD_CAP
     state.step_limit = limit

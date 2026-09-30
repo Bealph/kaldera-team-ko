@@ -138,12 +138,22 @@ Elle a aussi fait ajouter des vérifications et un code d'arrêt :
 - **Les tests fournis n'ont pas été reformatés.** `ruff format` propose d'ajouter une ligne vide dans
   des fichiers d'origine ; ce serait modifier les tests fournis, ce que D9 exclut. Seul un
   commentaire ajouté localement dans `tests/test_runner.py` diffère du commit d'origine.
-- **Le chemin « live » (`graph.py`) reste une coquille.** Il ne câble aucun flux : c'est hors du
-  périmètre des scénarios de test.
-- **Aucun vrai LLM n'a été testé.** Les agents sont déterministes, et le budget de tokens repose sur
-  un coût fixe par étape.
-- **`max_steps` reste lu dans `expected`**, alors que la spécification le place dans la demande :
-  l'écart est signalé, et les scénarios fournis ne sont pas modifiés.
+- **Le chemin « live » (`graph.py`) est câblé.** Le `StateGraph` réutilise `route` et
+  `check_demand` du chef déterministe : mêmes garde-fous (rôle, budget, limite d'étapes, clôture
+  par le finalizer), mais chaque agent produit son artefact via un vrai appel LLM
+  (`Agent.act_with_llm`, `llm.py`). Le runner déterministe (`runner.py`), lui, reste inchangé et
+  reste le point d'entrée des scénarios rejouables. Voir `tests/test_graph.py`.
+  - ponytail : contrairement au chef déterministe, une réception refusée sur ce chemin arrête le
+    flux directement, sans relance unique. À ajouter si le chemin live doit un jour rejouer une
+    étape.
+- **Un vrai LLM est testé.** `tests/test_graph.py::test_run_live_completes_with_a_real_llm` appelle
+  l'API Azure AI (endpoint compatible OpenAI, `langchain_openai.ChatOpenAI` — `langchain-azure-ai`
+  cible l'API azure-ai-inference, incompatible avec cet endpoint, vérifié à la main). Le test se
+  saute si les identifiants Azure AI (`AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_MODEL`,
+  via `.env` ou l'environnement) sont absents.
+- **`max_steps` est maintenant lu dans la demande (`initial_context`) en priorité**, conformément à
+  la spécification, avec repli sur `expected` puis sur `HARD_CAP` (`runner.py`). Les scénarios
+  fournis ne sont pas modifiés : ils continuent de fonctionner via le repli.
 - **Ce que le code ne peut pas empêcher.** En Python, un agent qui écrirait volontairement dans
   l'état en contournant toutes les interfaces n'est pas bloqué au moment où il écrit. Mais le chef
   voit l'écart à la réception, et il annule le passage.

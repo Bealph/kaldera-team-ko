@@ -21,3 +21,7 @@ class Finalizer(Agent):
         content = state.artifacts[source] if source is not None else ""
         state.artifacts["final"] = f"final:{content}"
         state.status = "done"
+
+    def act_with_llm(self, state: TeamState, step: Step, llm: object) -> None:
+        super().act_with_llm(state, step, llm)
+        state.status = "done"
