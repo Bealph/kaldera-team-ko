@@ -53,10 +53,15 @@ make down       # stoppe le service docker
 
 ## Known issues
 
-- L'orchestration et le routage présentent encore des comportements à fiabiliser
-  sur certains scénarios ; le rejeu via `scenarios/` reste la référence de comportement.
-- Les garde-fous d'exécution (budget d'étapes, budget de tokens, journalisation)
-  demandent une passe de validation supplémentaire avant un usage réel.
+- Le chemin « live » (`graph.py`, LangGraph) est encore une coquille : il se compile mais ne câble
+  aucun flux. Le runner déterministe (`runner.py`) est la référence de comportement.
+- Aucun vrai LLM n'a été testé ; le budget de tokens repose sur un coût fixe par étape.
+- `max_steps` est lu dans `expected` des scénarios, alors que `specs/flow_spec.md` le place dans la
+  demande (écart signalé, scénarios non modifiés).
+
+Les boucles, le conflit sur `REVIEW` et les garde-fous ont été corrigés : voir
+`doc/developpement/choix_de_developpement.md`. Pour prouver que chaque défaut corrigé serait
+détecté s'il revenait : `uv run python scripts/grille_de_preuve.py`.
 
 ## License
 

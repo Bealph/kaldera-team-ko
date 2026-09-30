@@ -12,7 +12,7 @@ Code étudié : dépôt `kaldera-team-ko`, commit `37c2cb3`
 - Les freins sont écrits dans la spécification mais pas appliqués dans le code. Le chef confie la
   relecture au mauvais agent, et le journal ne permet pas de le voir.
 - Le chef ne produit rien. Il confie chaque étape à son unique propriétaire, vérifie ce qu'on lui
-  rend, puis avance ou arrête, sans jamais relancer. Le flux vérifie la demande avant de démarrer,
+  rend, puis avance, relance une seule fois si ce qu'on lui rend n'est pas conforme, ou arrête. Le flux vérifie la demande avant de démarrer,
   suit l'ordre de la demande, et seul le finalizer clôt.
 - Des tests provoquent chaque boucle et chaque conflit. Une grille de preuve montre que chaque
   défaut est attrapé par au moins un test.
@@ -25,12 +25,12 @@ Code étudié : dépôt `kaldera-team-ko`, commit `37c2cb3`
 Voici les agents qui exécutent ces étapes, tels qu'ils existent dans le code actuel (avant
 correction) :
 
-| Agent        | Fichier                   | Étape(s) gérée(s) (`handles`) | Artefact écrit    | Lit             |
-| ------------ | -------------------------- | ------------------------------ | ------------------ | ---------------- |
-| `Researcher` | `agents/researcher.py`     | `RESEARCH`                     | `artifacts.research` | `state.topic`   |
-| `Writer`     | `agents/writer.py`         | `DRAFT`, `REVIEW`               | `artifacts.draft`  | `artifacts.research` |
-| `Reviewer`   | `agents/reviewer.py`       | `REVIEW`                        | `artifacts.review` | `artifacts.draft`    |
-| `Finalizer`  | `agents/finalizer.py`      | `FINALIZE`                      | `artifacts.final`, `status = done` | `artifacts.review`  |
+| Agent        | Fichier                | Étape(s) gérée(s) (`handles`) | Artefact écrit                     | Lit                  |
+| ------------ | ---------------------- | ----------------------------- | ---------------------------------- | -------------------- |
+| `Researcher` | `agents/researcher.py` | `RESEARCH`                    | `artifacts.research`               | `state.topic`        |
+| `Writer`     | `agents/writer.py`     | `DRAFT`, `REVIEW`             | `artifacts.draft`                  | `artifacts.research` |
+| `Reviewer`   | `agents/reviewer.py`   | `REVIEW`                      | `artifacts.review`                 | `artifacts.draft`    |
+| `Finalizer`  | `agents/finalizer.py`  | `FINALIZE`                    | `artifacts.final`, `status = done` | `artifacts.review`   |
 
 Le chef n'est pas un agent au sens du code : c'est le routage (`STEP_TO_AGENT`,
 `orchestrator.py:16-21`), qui délègue à l'un des quatre agents ci-dessus selon l'étape en cours.
@@ -122,23 +122,25 @@ l'a déjà eue : c'est ce qui ferme la boucle du point ①.
 Le flux se déroule en trois temps :
 
 - **A · Avant** : le chef lit la demande et la vérifie. Il contrôle le sujet, les libellés, l'absence
-  de doublon, `FINALIZE` en dernier, les entrées de chaque étape, le nombre d'étapes et la
+  de doublon, les entrées de chaque étape, le nombre d'étapes et la
   composition de l'équipe. Une demande invalide ne démarre pas.
 - **B · Pendant** : une étape à la fois, dans l'ordre exact de la demande. Le budget d'étapes et le
   budget de tokens sont appliqués. Chaque action et chaque décision du chef est journalisée.
 - **C · À la fin** : seul le finalizer passe le statut à `done`, puis le chef répond `END`.
 
-Le seul retour du flux mène à l'étape **suivante**, jamais à la même. Tout franchissement de
-frontière arrête le flux en `aborted`, avec un code, et sans relance :
+Le flux ne revient jamais en arrière. Une étape n'est confiée à nouveau qu'**une seule fois**, et
+seulement si la réception l'a refusée ; au second refus, le flux s'arrête. Tout autre franchissement
+de frontière arrête le flux **immédiatement** en `aborted`, avec un code :
 
-| Code                       | Situation                                                     |
-| -------------------------- | ------------------------------------------------------------- |
-| `invalid_demand` (+ motif) | la demande échoue à une vérification préalable                |
-| `role_violation`           | un agent reçoit une étape hors de son rôle                    |
-| `budget_exceeded`          | un agent dépasse son budget de tokens                         |
-| `reception_refused`        | l'artefact attendu manque, ou un autre artefact a été écrit   |
-| `step_limit_reached`       | la limite d'étapes est atteinte (garde-fou)                   |
-| `missing_closure`          | la fin est atteinte sans clôture par le finalizer (garde-fou) |
+| Code                       | Situation                                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `invalid_demand` (+ motif) | la demande échoue à une vérification préalable                                                            |
+| `role_violation`           | un agent reçoit une étape hors de son rôle                                                                |
+| `budget_exceeded`          | un agent dépasse son budget de tokens                                                                     |
+| `reception_refused`        | l'artefact attendu manque, ou un autre artefact a été écrit, deux fois de suite (après la relance unique) |
+| `step_limit_reached`       | la limite d'étapes est atteinte (garde-fou)                                                               |
+| `agent_error`              | un agent lève une erreur imprévue (ajouté pendant le Développement)                                       |
+| `missing_closure`          | la fin est atteinte sans clôture par le finalizer (garde-fou)                                             |
 
 Parcours attendus sur les scénarios fournis :
 
@@ -153,12 +155,12 @@ Parcours attendus sur les scénarios fournis :
 Un bon test provoque la situation, l'observe dans les traces, et échoue pour la bonne raison. Les
 tests sont rangés sur quatre niveaux :
 
-| Niveau                 | Ce qu'on vérifie                                                                                                                                                                | Test clé                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 1 · Dessin de l'équipe | chaque étape a un seul propriétaire, et chaque agent refuse les étapes des autres (12 refus, 4 acceptations)                                                                    | `test_every_agent_refuses_every_foreign_step`    |
-| 2 · Boucles et arrêts  | un agent bloqué est arrêté à la première réception ; chaque demande invalide est refusée avec son motif                                                                         | `test_stuck_agent_is_stopped_at_first_reception` |
-| 3 · Conflits           | chaque étape est traitée par son propriétaire ; un intrus est rejeté ; un refus ne renvoie pas la balle à un autre agent                                                        | `test_each_step_is_done_by_its_owner`            |
-| 4 · Invariants         | après chaque exécution : aucune étape confiée deux fois, aucune action sans délégation, chaque artefact écrit par son seul propriétaire, limite respectée, fin toujours motivée | vérification commune, appliquée à chaque test    |
+| Niveau                 | Ce qu'on vérifie                                                                                                                                                                                                              | Test clé                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 1 · Dessin de l'équipe | chaque étape a un seul propriétaire, et chaque agent refuse les étapes des autres (12 refus, 4 acceptations)                                                                                                                  | `test_every_agent_refuses_every_foreign_step` |
+| 2 · Boucles et arrêts  | un agent bloqué est arrêté après une relance unique ; chaque demande invalide est refusée avec son motif                                                                                                                      | `test_stuck_agent_is_stopped_after_one_retry` |
+| 3 · Conflits           | chaque étape est traitée par son propriétaire ; un intrus est rejeté ; un refus ne renvoie pas la balle à un autre agent                                                                                                      | `test_each_step_is_done_by_its_owner`         |
+| 4 · Invariants         | après chaque exécution : aucune étape confiée plus de deux fois (la seconde seulement après un refus), aucune action sans délégation, chaque artefact écrit par son seul propriétaire, limite respectée, fin toujours motivée | vérification commune, appliquée à chaque test |
 
 - Tous les tests supposent que le journal porte le nom de l'agent, y compris pour le chef. Trois
   traces s'y ajoutent :
@@ -168,16 +170,15 @@ tests sont rangés sur quatre niveaux :
 
   Le registre est nécessaire parce que le writer réécrit `draft` avec la même valeur : comparer les
   artefacts avant et après ne montrerait rien.
-- Les invariants ne portent que sur le travail accepté. Un artefact refusé à la réception, ou laissé
-  par un dépassement de budget, est conservé mais marqué incomplet, donc exclu. Le test qui provoque
+- Les invariants ne portent que sur le travail accepté. Un passage refusé à la réception est annulé :
+  ses écritures sont retirées de l'état et gardées au registre comme incomplètes, donc exclues. Le test qui provoque
   la violation vérifie qu'elle a été arrêtée avec le bon code.
 - Trois faiblesses des tests fournis, et leur réponse :
-  - `test_step_budget_is_enforced` passerait pour une mauvaise raison. Sa demande `[RESEARCH]` ne
-    finit pas par `FINALIZE`, donc la vérification préalable la refuserait avant que le budget soit
-    éprouvé. On le garde tel quel, et `test_stuck_agent_is_stopped_at_first_reception` vise la
-    bonne raison.
-  - Le garde-fou de la limite ne se déclenche plus en fonctionnement normal, puisqu'une demande trop
-    longue est refusée au départ et qu'aucune étape n'est relancée.
+  - `test_step_budget_is_enforced` aurait passé pour une mauvaise raison avec la règle « `FINALIZE`
+    en dernier ». La décision D5 supprime cette règle : le test éprouve désormais l'arrêt d'un agent
+    bloqué, appelé deux fois puis arrêté en `reception_refused`.
+  - Le garde-fou de la limite ne se déclenche que si des relances font dépasser la limite, puisqu'une
+    demande trop longue est refusée au départ.
     `test_step_guard_stops_at_limit` l'éprouve avec un état fourni déjà à la limite.
   - Le test de bout en bout juge le flux sur la limite que le flux s'est lui-même donnée. On y ajoute
     un oracle indépendant de `max_steps` : le nombre exact d'étapes, l'ordre des agents, et
@@ -190,19 +191,19 @@ tests sont rangés sur quatre niveaux :
 
 ---
 
-## 5. Décisions prises, à valider
+## 5. Décisions, validées le 30/09/2026
 
-| N° | Décision                                                                                                                  | Origine                                     |
-| -- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| D1 | Le reviewer produit la version corrigée, sans renvoyer au writer                                                          | spécification, l. 12                        |
-| D2 | L'avancement de l'étape passe de l'agent au chef, après réception                                                         | choix de conception                         |
-| D3 | Toute frontière franchie arrête le flux (`aborted` + code), sans relance ni autre agent                                   | choix de conception                         |
-| D4 | La demande et la composition de l'équipe sont vérifiées avant tout travail, même pour un état fourni directement          | spécification, l. 27 et 29, étendue         |
-| D5 | Une demande doit se terminer par `FINALIZE` (écarte la demande `[RESEARCH]` d'un test fourni)                             | choix de conception                         |
-| D6 | `max_steps` est lu dans `expected` des scénarios, et `max_iterations` prime                                               | écart avec la spécification, l. 29, signalé |
-| D7 | `final` est construit sur l'artefact le plus abouti : `review`, sinon `draft`, sinon `research`                           | choix de conception                         |
-| D8 | Raisons d'arrêt sous forme de codes stables, conservées dans l'état ; le chef journalise ses décisions                    | spécification, l. 35-36, étendue            |
-| D9 | Tests et scénarios fournis intacts ; tests nouveaux à côté ; grille de preuve obligatoire avant de clore le Développement | choix de conception                         |
+| N° | Décision                                                                                                                             | Origine                                      |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| D1 | Le reviewer produit la version corrigée, sans renvoyer au writer                                                                     | spécification, l. 12                         |
+| D2 | L'avancement de l'étape passe de l'agent au chef, après réception                                                                    | choix de conception                          |
+| D3 | Une frontière franchie arrête le flux (`aborted` + code) ; seule une réception refusée donne droit à une relance unique, journalisée | choix de conception, modifié à la validation |
+| D4 | La demande et la composition de l'équipe sont vérifiées avant tout travail, même pour un état fourni directement                     | spécification, l. 27 et 29, étendue          |
+| D5 | `FINALIZE` n'est pas exigé au départ : une fin sans clôture par le finalizer s'arrête en `missing_closure`                           | choix de conception, modifié à la validation |
+| D6 | `max_steps` est lu dans `expected` des scénarios, et `max_iterations` prime                                                          | écart avec la spécification, l. 29, signalé  |
+| D7 | `final` est construit sur l'artefact le plus abouti : `review`, sinon `draft`, sinon `research`                                      | choix de conception                          |
+| D8 | Raisons d'arrêt sous forme de codes stables, conservées dans l'état ; le chef journalise ses décisions                               | spécification, l. 35-36, étendue             |
+| D9 | Tests et scénarios fournis intacts ; tests nouveaux à côté ; grille de preuve obligatoire avant de clore le Développement            | choix de conception                          |
 
 ---
 

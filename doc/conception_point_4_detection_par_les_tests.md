@@ -2,6 +2,17 @@
 
 Brief Kaldera · Phase CONCEPTION, point 4 · 29/09/2026 · Code étudié : commit `37c2cb3`
 
+
+> **Mise à jour du 30/09/2026 · décisions validées.** Deux décisions ont changé à la validation :
+> **D3**, une réception refusée donne droit à une relance unique, journalisée, avant l'arrêt ; et
+> **D5**, `FINALIZE` n'est plus exigé au départ : une fin sans clôture s'arrête en
+> `missing_closure`. Cette note est corrigée en conséquence. La liste complète est dans
+> `livrable_conception/note_diagnostic_et_schema_cible.md`, section 5.
+>
+> **Complément du Développement.** La revue du code a ajouté des garde-fous : un passage refusé
+> est **annulé** (ses écritures sont retirées de l'état et gardées au registre comme incomplètes) ;
+> nouveaux motifs de refus `finalize_not_last`, `state_not_fresh` et `invalid_limit` ; nouveau
+> code d'arrêt `agent_error`. Détail dans `doc/developpement/choix_de_developpement.md`.
 ---
 
 ## La réponse en bref
@@ -77,7 +88,6 @@ Les motifs de `invalid_demand` sont les suivants :
 | `empty`           | la demande n'a pas de sujet, ou aucune étape                 |
 | `unknown_label`   | un libellé ne correspond à aucune étape de la spécification  |
 | `duplicate_step`  | une étape apparaît deux fois                                 |
-| `not_finalized`   | la demande ne se termine pas par `FINALIZE`                  |
 | `missing_input`   | une étape ne trouve pas son entrée dans une étape précédente |
 | `too_many_steps`  | la demande dépasse la limite d'étapes                        |
 | `team_incomplete` | une étape n'a pas exactement un agent dans l'équipe          |
@@ -118,24 +128,24 @@ non-régression** : il échouera si quelqu'un réintroduit un jour une table éc
 de tourner à vide.
 
 **Point de départ commun.** Sauf mention contraire, chaque test part d'une **demande valide** : un
-sujet, les étapes dans le bon ordre, `FINALIZE` en dernier. Il part aussi d'une **équipe
+sujet, les étapes dans le bon ordre, et `FINALIZE` pour clore. Il part aussi d'une **équipe
 complète**. Sinon, la vérification préalable du point 3 arrêterait le flux avec le code
 `invalid_demand`, et le test passerait pour une mauvaise raison.
 
-| Test                                             | Statut  | Ce qu'il provoque                                                                 | Ce qu'il attend                                                                                    |
-| ------------------------------------------------ | ------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `test_stuck_agent_is_stopped_at_first_reception` | nouveau | un researcher qui n'écrit rien                                                    | `aborted`, code `reception_refused`, researcher appelé **une seule** fois                          |
-| `test_step_guard_stops_at_limit`                 | nouveau | demande `[RESEARCH, FINALIZE]`, limite 2, état fourni avec déjà 2 étapes comptées | `aborted`, code `step_limit_reached`, aucun agent appelé                                           |
-| `test_invalid_demands_are_refused`               | nouveau | une demande invalide par motif (7 cas), y compris par un état fourni directement  | `aborted`, code `invalid_demand`, **motif exact attendu**, aucun agent appelé                      |
-| `test_route_returns_end_once_all_steps_done`     | fourni  | toutes les étapes traitées                                                        | le chef répond `END`                                                                               |
-| `test_missing_closure_is_detected`               | nouveau | un finalizer qui écrit `final` sans passer le statut à `done`                     | `aborted`, code `missing_closure`                                                                  |
-| `test_budget_exceeded_stops_flow`                | nouveau | un researcher qui dépasse son budget de tokens                                    | `aborted`, code `budget_exceeded`, finalizer non appelé, aucun artefact écrit (coût fixe, point 3) |
-| `test_per_agent_token_budget_is_enforced`        | fourni  | un agent au budget de 50 qui en consomme 100                                      | `BudgetExceeded` levée                                                                             |
+| Test                                          | Statut  | Ce qu'il provoque                                                                 | Ce qu'il attend                                                                                    |
+| --------------------------------------------- | ------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `test_stuck_agent_is_stopped_after_one_retry` | nouveau | un researcher qui n'écrit rien                                                    | `aborted`, code `reception_refused`, researcher appelé **deux** fois (une relance)                 |
+| `test_step_guard_stops_at_limit`              | nouveau | demande `[RESEARCH, FINALIZE]`, limite 2, état fourni avec déjà 2 étapes comptées | `aborted`, code `step_limit_reached`, aucun agent appelé                                           |
+| `test_invalid_demands_are_refused`            | nouveau | une demande invalide par motif (6 cas), y compris par un état fourni directement  | `aborted`, code `invalid_demand`, **motif exact attendu**, aucun agent appelé                      |
+| `test_route_returns_end_once_all_steps_done`  | fourni  | toutes les étapes traitées                                                        | le chef répond `END`                                                                               |
+| `test_missing_closure_is_detected`            | nouveau | un finalizer qui écrit `final` sans passer le statut à `done`                     | `aborted`, code `missing_closure`                                                                  |
+| `test_budget_exceeded_stops_flow`             | nouveau | un researcher qui dépasse son budget de tokens                                    | `aborted`, code `budget_exceeded`, finalizer non appelé, aucun artefact écrit (coût fixe, point 3) |
+| `test_per_agent_token_budget_is_enforced`     | fourni  | un agent au budget de 50 qui en consomme 100                                      | `BudgetExceeded` levée                                                                             |
 
-- **`test_stuck_agent_is_stopped_at_first_reception` est le test de la boucle du point 1.** Sur le
+- **`test_stuck_agent_is_stopped_after_one_retry` est le test de la boucle du point 1.** Sur le
   code actuel, l'agent bloqué est appelé 50 fois. C'est ce qu'a mesuré la sonde de diagnostic
   (`Livrable_3_Note_diagnostic_schema_cible/outils/sonde_diagnostic.py`).
-- **`test_invalid_demands_are_refused` compare le motif exact**, pas seulement le code : les 7
+- **`test_invalid_demands_are_refused` compare le motif exact**, pas seulement le code : les 6
   vérifications partagent le même code `invalid_demand`. Le cas `too_many_steps` remplace ainsi un
   test séparé. Pour le cas `unknown_label`, la demande passe par la lecture, puisque c'est la
   lecture qui reconnaît les libellés.
@@ -181,13 +191,13 @@ une fois, dans une vérification commune, et on l'applique à la fin de chaque t
 flux, les deux scénarios compris.
 
 **Ce qu'ils couvrent exactement.** Les invariants portent sur le travail **accepté** par le chef.
-Quand un test provoque volontairement une violation (un intrus, par exemple), l'artefact fautif est
-marqué incomplet, donc exclu des invariants. Le test vérifie alors que la violation a été
+Quand un test provoque volontairement une violation (un intrus, par exemple), l'écriture fautive est
+annulée et marquée comme refusée au registre, donc exclue des invariants. Le test vérifie alors que la violation a été
 **arrêtée avec le bon code**.
 
 | Invariant                                                                                                                    | Se vérifie avec                         | Détecte                                                   |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
-| I1 · Aucune étape n'est confiée deux fois                                                                                    | journal du chef (délégations)           | la relance, et le ping-pong qui passe par le chef         |
+| I1 · Aucune étape n'est confiée plus de deux fois, la seconde seulement après un refus                                       | journal du chef (délégations)           | la relance, et le ping-pong qui passe par le chef         |
 | I2 · Aucun agent n'agit sur une étape sans délégation préalable du chef                                                      | journaux du chef et des agents          | le ping-pong direct, d'un agent à l'autre                 |
 | I3 · Chaque étape acceptée a été traitée par son propriétaire                                                                | journal des agents                      | l'agent qui fait le travail d'un autre                    |
 | I4 · Chaque artefact accepté est écrit une seule fois, par son propriétaire                                                  | registre d'écriture                     | le chevauchement sur un artefact, même à valeur identique |
@@ -206,11 +216,11 @@ marqué incomplet, donc exclu des invariants. Le test vérifie alors que la viol
 
 ## 6. Les trois faiblesses héritées du point 3
 
-| Faiblesse                                                                      | Réponse                                                                                                                                        |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Le garde-fou du budget d'étapes ne se déclenche plus en fonctionnement normal  | `test_step_guard_stops_at_limit` fournit un état déjà à la limite : c'est un test du garde-fou lui-même                                        |
-| `test_step_budget_is_enforced` passerait pour une autre raison                 | on le garde tel quel, et `test_stuck_agent_is_stopped_at_first_reception` vise la bonne raison, avec une demande valide et une équipe complète |
-| Le test de bout en bout juge le flux sur la limite qu'il s'est lui-même donnée | on ajoute un oracle indépendant de `max_steps`, détaillé ci-dessous                                                                            |
+| Faiblesse                                                                                            | Réponse                                                                                                              |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Le garde-fou du budget d'étapes ne se déclenche que si des relances font dépasser la limite          | `test_step_guard_stops_at_limit` fournit un état déjà à la limite : c'est un test du garde-fou lui-même              |
+| `test_step_budget_is_enforced` passait pour une autre raison avec la règle « `FINALIZE` en dernier » | la décision D5 retire cette règle : sa demande `[RESEARCH]` est valide, et le test éprouve l'arrêt d'un agent bloqué |
+| Le test de bout en bout juge le flux sur la limite qu'il s'est lui-même donnée                       | on ajoute un oracle indépendant de `max_steps`, détaillé ci-dessous                                                  |
 
 L'oracle indépendant comprend trois vérifications :
 
@@ -257,7 +267,7 @@ Un défaut qu'aucun test n'attrape est un trou de la suite, à combler avant de 
 | Le budget de tokens n'est jamais comparé                | `test_per_agent_token_budget_is_enforced`, `test_budget_exceeded_stops_flow`                                                         |
 | La demande n'est pas lue                                | `test_load_context_populates_state`, les deux scénarios                                                                              |
 | `PROOFREAD` au lieu de `REVIEW`                         | `test_review_label_resolves_to_review_step`, `test_all_business_labels_resolve`                                                      |
-| Un agent bloqué est relancé sans fin                    | `test_stuck_agent_is_stopped_at_first_reception`, invariant I1                                                                       |
+| Un agent bloqué est relancé sans fin                    | `test_stuck_agent_is_stopped_after_one_retry`, invariant I1                                                                          |
 
 **Deux précisions sur cette grille.**
 
@@ -276,12 +286,12 @@ La grille compte 13 lignes : 12 défauts des points 1 à 3, plus la relance sans
 
 ## 8. Correspondance avec les critères de réussite du brief
 
-| Critère du brief                                            | Tests qui le démontrent                                                                                 |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| L'orchestration ne boucle plus                              | `test_stuck_agent_is_stopped_at_first_reception`, `test_step_guard_stops_at_limit`, invariants I1 et I5 |
-| Les conflits sont résolus                                   | niveau 3, invariants I3 et I4 ; I2 en prévention du ping-pong direct                                    |
-| Chaque sub-agent tient son rôle, sans empiéter              | niveau 1, `test_intruder_agent_is_rejected`, invariants I3 et I4                                        |
-| Le flux respecte la spécification sur les scénarios de test | les deux scénarios, l'oracle indépendant (section 6), `test_invalid_demands_are_refused`, invariant I6  |
+| Critère du brief                                            | Tests qui le démontrent                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| L'orchestration ne boucle plus                              | `test_stuck_agent_is_stopped_after_one_retry`, `test_step_guard_stops_at_limit`, invariants I1 et I5   |
+| Les conflits sont résolus                                   | niveau 3, invariants I3 et I4 ; I2 en prévention du ping-pong direct                                   |
+| Chaque sub-agent tient son rôle, sans empiéter              | niveau 1, `test_intruder_agent_is_rejected`, invariants I3 et I4                                       |
+| Le flux respecte la spécification sur les scénarios de test | les deux scénarios, l'oracle indépendant (section 6), `test_invalid_demands_are_refused`, invariant I6 |
 
 ---
 

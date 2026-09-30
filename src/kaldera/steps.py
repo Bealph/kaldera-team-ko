@@ -1,4 +1,5 @@
 """Étapes métier du flux Kaldera et résolution depuis les scénarios."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -11,14 +12,9 @@ class Step(str, Enum):
     FINALIZE = "FINALIZE"
 
 
-# Correspondance entre les libellés employés dans les scénarios et les membres
-# de l'énumération.
-STEP_BY_NAME: dict[str, Step] = {
-    "RESEARCH": Step.RESEARCH,
-    "DRAFT": Step.DRAFT,
-    "PROOFREAD": Step.REVIEW,
-    "FINALIZE": Step.FINALIZE,
-}
+# Les libellés des scénarios sont exactement les noms de la spécification : la table se
+# déduit de l'énumération, sans seconde déclaration qui pourrait diverger.
+STEP_BY_NAME: dict[str, Step] = {step.value: step for step in Step}
 
 
 def step_from_name(name: str) -> Step:

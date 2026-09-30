@@ -1,4 +1,5 @@
 """Point d'entrée : rejoue les scénarios fournis et affiche le résultat."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +17,7 @@ def main() -> None:
         print(
             f"[{scenario['id']}] status={state.status} "
             f"steps={state.step_count} artifacts={sorted(state.artifacts)}"
+            + (f" stop_reason={state.stop_reason}" if state.stop_reason else "")
         )
 
 

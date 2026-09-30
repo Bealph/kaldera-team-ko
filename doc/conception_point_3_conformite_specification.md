@@ -2,6 +2,17 @@
 
 Brief Kaldera · Phase CONCEPTION, point 3 · 29/09/2026 · Code étudié : commit `37c2cb3`
 
+
+> **Mise à jour du 30/09/2026 · décisions validées.** Deux décisions ont changé à la validation :
+> **D3**, une réception refusée donne droit à une relance unique, journalisée, avant l'arrêt ; et
+> **D5**, `FINALIZE` n'est plus exigé au départ : une fin sans clôture s'arrête en
+> `missing_closure`. Cette note est corrigée en conséquence. La liste complète est dans
+> `livrable_conception/note_diagnostic_et_schema_cible.md`, section 5.
+>
+> **Complément du Développement.** La revue du code a ajouté des garde-fous : un passage refusé
+> est **annulé** (ses écritures sont retirées de l'état et gardées au registre comme incomplètes) ;
+> nouveaux motifs de refus `finalize_not_last`, `state_not_fresh` et `invalid_limit` ; nouveau
+> code d'arrêt `agent_error`. Détail dans `doc/developpement/choix_de_developpement.md`.
 ---
 
 ## La réponse en bref
@@ -74,7 +85,6 @@ pourrait diverger.
 | La demande contient un sujet non vide et au moins une étape                                        | choix de conception : sans sujet, la recherche n'a pas d'objet                 |
 | Chaque libellé est une étape de la spécification                                                   | spécification, l. 8-13                                                         |
 | Aucune étape n'apparaît deux fois                                                                  | choix de conception : chaque artefact n'est écrit qu'une fois (point 2)        |
-| La demande se termine par `FINALIZE`                                                               | choix de conception, voir décision 2                                           |
 | `DRAFT` est précédé de `RESEARCH`, `REVIEW` de `DRAFT`, `FINALIZE` d'au moins une étape de contenu | spécification, l. 11-12 (« à partir de la recherche », « corrections du jet ») |
 | Le nombre d'étapes ne dépasse pas `max_steps`                                                      | spécification, l. 29                                                           |
 | Chaque étape a exactement un agent dans l'équipe                                                   | spécification, l. 27, et décision 4 du point 2                                 |
@@ -108,13 +118,12 @@ précédente (point 2).
   aujourd'hui (`runner.py:26-30`). À défaut, la limite est `max_steps`. À défaut encore, c'est le
   filet `HARD_CAP = 50` (`runner.py:9`).
 - **La vraie garantie est prise avant le départ.** La demande ne démarre que si elle tient dans son
-  budget (section 2). Chaque étape n'est confiée qu'une fois, et le chef ne relance jamais
-  (point 2). Le nombre d'étapes confiées ne peut donc pas dépasser la limite.
+  budget (section 2). Une étape n'est confiée à nouveau qu'une fois, après un refus
+  (point 2). Le nombre d'étapes confiées reste donc borné.
 - **Le contrôle pendant le flux reste, en garde-fou.** Avant chaque délégation, le chef compare le
   nombre d'étapes déjà confiées à la limite. Si elle est atteinte, il arrête en `aborted`, avec la
-  raison « budget d'étapes atteint ». Avec les règles ci-dessus, ce contrôle **ne se déclenche
-  jamais** sur une demande normale. On le garde pour le cas où une autre règle serait cassée par une
-  modification future.
+  raison « budget d'étapes atteint ». Il ne se déclenche que si des relances font
+  dépasser la limite, ou si une autre règle est cassée par une modification future.
 
 **Un écart à signaler.** La spécification parle du budget « de la demande » (l. 29). Dans les
 scénarios, `max_steps` ne se trouve pas dans la demande (`initial_context`), mais dans le résultat
@@ -176,9 +185,9 @@ condition de fin est décalée d'un cran : `orchestrator.py:25` utilise « stric
 lieu de « plus grand ou égal », et le chef plante. Il passe aussi le statut à `done` de lui-même
 (`runner.py:33-35`) : ce comportement disparaît.
 
-Comme la demande se termine toujours par `FINALIZE` (section 2), le chef arrive à `END` juste après
-le finalizer. Si le statut n'est pas `done` à ce moment-là, le flux s'arrête en `aborted`, avec la
-raison « fin sans clôture ». C'est un garde-fou : il ne doit jamais se déclencher.
+Si le statut n'est pas `done` quand le chef arrive à `END`, le flux s'arrête en `aborted`, avec la
+raison « fin sans clôture ». C'est le cas d'une demande qui ne contient pas `FINALIZE`, ou d'un
+finalizer qui n'a pas clos (D5, validée le 30/09/2026).
 
 ---
 
@@ -202,10 +211,10 @@ Les tests fournis qui vérifient ces exigences échouent tous aujourd'hui :
 - **E9** : `test_route_returns_end_once_all_steps_done` ;
 - **tout le parcours** : les deux cas de `test_scenario_completes_within_budget`.
 
-**Une conséquence à connaître.** Avec la vérification de la section 2, `test_step_budget_is_enforced`
-passerait **pour une autre raison** que celle qu'il vise. Sa demande (`[RESEARCH]`) ne se termine
-pas par `FINALIZE`, et son équipe n'a pas de finalizer. Le flux serait refusé avant de démarrer,
-sans que le budget d'étapes soit mis à l'épreuve.
+**Une conséquence à connaître.** Avec la règle initiale « `FINALIZE` en dernier »,
+`test_step_budget_is_enforced` aurait passé pour une autre raison que celle qu'il vise. La décision
+D5 retire cette règle : sa demande `[RESEARCH]` est valide, et le test éprouve bien l'arrêt d'un
+agent bloqué.
 
 ---
 
@@ -218,18 +227,13 @@ seconde version, qui divergerait comme les trois déclarations de rôle du point
 
 ---
 
-## 7. Décisions prises, à valider
+## 7. Décisions, validées le 30/09/2026
 
 1. **La demande est vérifiée avant tout travail** (section 2), y compris quand l'état est fourni
    directement. Une demande invalide ne démarre pas.
-2. **Une demande doit se terminer par `FINALIZE`.**
-   - *C'est un choix de conception*, pas une exigence écrite de la spécification. La spécification
-     dit que le finalizer clôt (l. 20) et que la fin est explicite (l. 28), mais pas qu'il doit
-     figurer dans chaque demande.
-   - *Pourquoi ce choix :* sans finalizer, personne ne peut clore, et le statut `done` n'aurait plus
-     d'auteur.
-   - *Ce qu'il coûte :* il rejette la demande `[RESEARCH]` du test `test_step_budget_is_enforced`.
-   - Les deux scénarios fournis s'y conforment.
+2. **`FINALIZE` n'est pas exigé au départ** (modifié à la validation). Une fin atteinte sans clôture
+   par le finalizer s'arrête en `missing_closure`. Aucune règle hors spécification n'est ajoutée, et
+   `test_step_budget_is_enforced` éprouve bien l'arrêt d'un agent bloqué.
 3. **Chaque étape trouve son entrée dans une étape précédente** (spécification, l. 11-12).
    L'absence de doublon et le sujet non vide sont des choix de conception.
 4. **`max_steps` est lu dans `expected`**, comme aujourd'hui, et `max_iterations` prime quand il est
@@ -248,6 +252,5 @@ seconde version, qui divergerait comme les trois déclarations de rôle du point
 Le point 4 traitera la question « comment détecter une boucle ou un conflit par un test ? ». Ce
 point-ci lui laisse trois constats :
 
-- le garde-fou du budget d'étapes ne se déclenche plus en fonctionnement normal ;
-- `test_step_budget_is_enforced` passerait pour une autre raison que celle qu'il vise ;
+- le garde-fou du budget d'étapes ne se déclenche que si des relances font dépasser la limite ;
 - le test de bout en bout juge le flux sur la limite que le flux s'est lui-même donnée.
