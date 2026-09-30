@@ -73,6 +73,30 @@ Les boucles, le conflit sur `REVIEW` et les garde-fous ont été corrigés : voi
 `doc/developpement/choix_de_developpement.md`. Pour prouver que chaque défaut corrigé serait
 détecté s'il revenait : `uv run python scripts/grille_de_preuve.py`.
 
+## GUI de démo
+
+Une GUI Gradio pédagogique (déterministe / vrai LLM / casser un garde-fou / comparer les deux)
+tourne en local et sur Azure Container Apps.
+
+**En local :**
+
+```bash
+uv sync --extra webapp
+uv run python -m kaldera.webapp.app
+```
+
+Ouvre `http://localhost:7860`.
+
+**En production :** `<URL Azure Container Apps — à renseigner après le premier déploiement, voir
+doc/guides/deploiement_azure_portail.md>`. Démarrage à froid possible (scale-to-zero) : ouvrir
+l'URL une minute avant une démo.
+
+**Déployer/relire l'infrastructure :**
+- `doc/guides/deploiement_azure_portail.md` — créer les ressources Azure (portail, pas à pas).
+- `doc/guides/github_actions_azure_oidc_portail.md` — connecter la CI à Azure sans secret
+  longue durée.
+- `.github/workflows/ci-cd.yml` — tests sur chaque PR, build + déploiement automatique sur `main`.
+
 ## License
 
 Usage interne — tous droits réservés.
