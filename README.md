@@ -81,6 +81,8 @@ tourne en local et sur Azure Container Apps.
 **En local :**
 
 ```bash
+make webapp
+# ou, sans passer par le Makefile :
 uv sync --extra webapp
 uv run python -m kaldera.webapp.app
 ```
