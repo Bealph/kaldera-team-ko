@@ -1,7 +1,9 @@
 # Connecter GitHub Actions à Azure — sans mot de passe (OIDC), pas à pas
 
-Suivre ce guide **après** `deploiement_azure_portail.md` (le groupe de ressources
-`rg-kaldera-demo` doit déjà exister). Objectif : que la CI GitHub Actions puisse déployer sur
+Suivre ce guide **après la seule section 1** de `deploiement_azure_portail.md` (le groupe de
+ressources `rg-kaldera-demo` doit déjà exister, mais pas encore le Container App — voir la
+section « Ordre global » de ce guide-là pour la séquence complète à travers les deux documents).
+Objectif : que la CI GitHub Actions puisse déployer sur
 Azure sans qu'aucun secret longue durée (mot de passe, clé, JSON de credentials) ne soit stocké
 dans GitHub. GitHub prouve son identité à chaque exécution via un jeton signé (OIDC), Azure le
 vérifie, et n'accorde l'accès qu'à la branche `main` de ce dépôt précis.
@@ -66,21 +68,31 @@ stocké nulle part).
 
 ## 6. Rendre l'image ghcr.io publique (évite un secret de registre en plus)
 
-Une fois que le workflow `.github/workflows/ci-cd.yml` a tourné au moins une fois avec succès sur
-`main` (il aura poussé une image vers `ghcr.io`) :
+Suivre ce guide dans l'ordre décrit par la section « Ordre global » de
+`deploiement_azure_portail.md` : à ce stade, le Container App n'existe pas encore, seul le groupe
+de ressources existe. Pousser un commit sur `main` (ou merger une PR) pour déclencher le workflow.
+Dans le job `deploy`, l'étape **« Build et push de l'image »** pousse l'image vers `ghcr.io` ;
+l'étape suivante, **« Redéploie le Container App »**, échouera puisque le Container App n'existe
+pas encore — attendu à ce stade. Ce qui compte : l'image est maintenant sur `ghcr.io`, même si le
+job affiche un échec global.
 
 1. Sur github.com → compte `sofiane-git` → onglet **Packages**.
 2. Ouvrir le package `kaldera-webapp`.
 3. **Package settings** (en bas de la page du package).
 4. **Change visibility** → **Public** → confirmer en tapant le nom du package.
 
-Ceci évite d'avoir à configurer un identifiant de registre côté Container App (Task 7, étape 2) :
-une image publique se tire sans authentification.
+Ceci évite d'avoir à configurer un identifiant de registre côté Container App
+(`deploiement_azure_portail.md`, section 2, étape 4) : une image publique se tire sans
+authentification. Revenir maintenant à `deploiement_azure_portail.md`, section 2, pour créer le
+Container App.
 
 ## Vérification finale
 
-Faire un commit vide sur `main` (ou merger une PR) pour déclencher le workflow, puis :
-github.com → onglet **Actions** du dépôt → ouvrir le run le plus récent → vérifier que le job
-`deploy` passe au vert. En cas d'échec sur l'étape « Connexion à Azure », revérifier que les 3
-secrets GitHub (étape 5) correspondent exactement aux valeurs des étapes 1 et 4, et que
-l'identité fédérée (étape 2) cible bien `refs/heads/main` de ce dépôt.
+Une fois `deploiement_azure_portail.md` terminé (Container App créé, secrets Azure AI ajoutés) :
+redéclencher le workflow (un commit vide sur `main`, ou relancer le run échoué depuis l'onglet
+Actions), puis github.com → onglet **Actions** du dépôt → ouvrir le run → vérifier que le job
+`deploy` passe au vert cette fois. En cas d'échec sur l'étape « Connexion à Azure », revérifier
+que les 3 secrets GitHub (étape 5) correspondent exactement aux valeurs des étapes 1 et 4, et que
+l'identité fédérée (étape 2) cible bien `refs/heads/main` de ce dépôt. En cas d'échec sur
+« Redéploie le Container App », revérifier que le Container App a bien été créé
+(`deploiement_azure_portail.md`, section 2).

@@ -7,6 +7,31 @@ temps, mais les ressources et leur logique restent les mêmes si un libellé a b
 Ressources créées : un groupe de ressources, un environnement Container Apps, un Container App.
 Tout se fait en une seule fois via l'assistant de création du Container App.
 
+## Ordre global (ce guide + le guide OIDC)
+
+Créer le Container App avant que l'image existe sur `ghcr.io`, ou avant qu'elle soit publique,
+bloque : Azure ne peut pas tirer une image privée sans identifiant de registre, et l'image
+n'existe pas tant que la CI n'a pas tourné au moins une fois. Suivre cet ordre précis, à travers
+les deux guides :
+
+1. **Ce guide, section 1** — créer le groupe de ressources (`rg-kaldera-demo`) seul, pas encore
+   le Container App.
+2. **`github_actions_azure_oidc_portail.md`, sections 1 à 5** — connecter GitHub Actions à Azure
+   (OIDC) et ajouter les 3 secrets GitHub. Le rôle IAM (section 3 de ce guide-là) cible le groupe
+   de ressources créé à l'étape précédente ; il n'a pas besoin que le Container App existe déjà.
+3. **Déclencher le workflow** (push sur `main`) : l'étape « Build et push de l'image » pousse
+   l'image sur `ghcr.io` *avant* la tentative de déploiement. Le job `deploy` échouera à l'étape
+   suivante (« Redéploie le Container App ») puisque le Container App n'existe pas encore —
+   attendu à ce stade, pas un bug.
+4. **`github_actions_azure_oidc_portail.md`, section 6** — rendre le package `ghcr.io` public,
+   maintenant que l'image y est (le job `deploy` peut avoir échoué, seul le push de l'image
+   compte ici).
+5. **Ce guide, section 2** — créer le Container App, qui peut maintenant tirer l'image publique
+   sans identifiant de registre.
+6. **Ce guide, section 3** — ajouter les secrets Azure AI au Container App.
+7. Redéclencher le workflow (un commit vide sur `main` suffit, ou relancer le run échoué depuis
+   l'onglet Actions) : cette fois le job `deploy` réussit de bout en bout.
+
 ## 1. Groupe de ressources
 
 1. Aller sur [portal.azure.com](https://portal.azure.com).
@@ -17,6 +42,9 @@ Tout se fait en une seule fois via l'assistant de création du Container App.
 5. **Vérifier + créer**, puis **Créer**.
 
 ## 2. Container App (et son environnement, créé au même moment)
+
+**À faire seulement après les sections 1 à 6 du guide OIDC** (voir « Ordre global » ci-dessus) :
+le groupe de ressources doit exister, et l'image `ghcr.io` doit déjà être poussée et publique.
 
 1. Barre de recherche → « Container Apps » → ouvrir le service (pas une ressource existante).
 2. **+ Créer** → **Container App**.
@@ -33,10 +61,11 @@ Tout se fait en une seule fois via l'assistant de création du Container App.
    - Source de l'image : **Autres registres de conteneurs** (ou « Docker Hub ou autre registre »
      selon le libellé affiché).
    - URL de l'image : `ghcr.io/sofiane-git/kaldera-webapp:latest`.
-   - Type d'authentification du registre : si le package `ghcr.io` a été rendu **public** (voir
-     Task 8 du plan, dernière étape), choisir « Aucune » / laisser vide — pas d'identifiant
-     nécessaire. S'il reste privé, il faudra un identifiant de registre (non couvert ici : rendre
-     le package public évite cette complication).
+   - Type d'authentification du registre : le package `ghcr.io` doit déjà être **public** à ce
+     stade (section 6 du guide OIDC, faite avant celle-ci — voir « Ordre global ») : choisir
+     « Aucune » / laisser vide, pas d'identifiant nécessaire. S'il reste privé, il faudra un
+     identifiant de registre (non couvert ici : rendre le package public évite cette
+     complication).
    - Ressources : 0.25 vCPU / 0.5 Gi suffisent largement pour cette démo.
 5. Onglet **Ingress** :
    - Activer l'ingress : **Activé**.

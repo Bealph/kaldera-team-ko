@@ -22,8 +22,15 @@ GUARDRAIL_LABELS = {
 _cost_guard = CostGuard()
 
 
+def _canonical_order(steps: list[str]) -> list[str]:
+    # `gr.CheckboxGroup` renvoie les valeurs cochées dans l'ordre des clics, pas dans l'ordre
+    # d'affichage des cases : une re-coche après décoche peut légitimement produire
+    # ["FINALIZE", "RESEARCH"] alors que le formulaire affiche toujours RESEARCH avant FINALIZE.
+    return [s for s in STEPS_CHOICES if s in steps]
+
+
 def on_run_deterministic(topic: str, steps: list[str]) -> dict:
-    return runners.run_deterministic(topic, steps)
+    return runners.run_deterministic(topic, _canonical_order(steps))
 
 
 def on_run_guardrail(defect: str) -> dict:
@@ -43,7 +50,7 @@ def on_run_live(topic: str, steps: list[str]) -> Iterator[dict]:
             "message": f"Patiente encore {wait}s avant un nouveau vrai run.",
         }
         return
-    yield from runners.stream_live(topic, steps)
+    yield from runners.stream_live(topic, _canonical_order(steps))
 
 
 def _format_summary(result: dict) -> str:
@@ -58,6 +65,8 @@ def _format_live_chunk(chunk: dict) -> str:
     parts = [f"[{node}] statut={chunk['status']} étapes={chunk['step_count']}"]
     if chunk.get("stop_reason"):
         parts.append(f"stop_reason={chunk['stop_reason']}")
+    if chunk.get("message"):
+        parts.append(chunk["message"])
     return " ".join(parts)
 
 

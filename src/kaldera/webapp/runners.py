@@ -3,6 +3,7 @@ testables sans lancer de serveur). Zéro changement à runner.py/graph.py/orches
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 
 from ..graph import HARD_CAP, build_graph
@@ -12,6 +13,8 @@ from ..runner import run_scenario
 from ..state import TeamState
 from ..steps import step_from_name
 from . import broken_registries
+
+_logger = logging.getLogger(__name__)
 
 
 def _summarize(state: TeamState) -> dict:
@@ -53,15 +56,23 @@ def stream_live(
         yield {"node": None, **_summarize(state)}
         return
 
-    client = llm if llm is not None else build_llm()
-    graph = build_graph(client, limit)
+    last: dict = {
+        "node": None,
+        "status": state.status,
+        "step_count": state.step_count,
+        "artifacts": dict(state.artifacts),
+        "stop_reason": state.stop_reason,
+        "log": list(state.log),
+    }
 
     try:
+        client = llm if llm is not None else build_llm()
+        graph = build_graph(client, limit)
         for chunk in graph.stream(state):
             node_name, node_state = next(iter(chunk.items()))
             if node_name == SUPERVISOR:
                 continue
-            yield {
+            last = {
                 "node": node_name,
                 "status": node_state["status"],
                 "step_count": node_state["step_count"],
@@ -69,12 +80,28 @@ def stream_live(
                 "stop_reason": node_state["stop_reason"],
                 "log": list(node_state["log"]),
             }
+            yield last
     except Exception:
+        _logger.exception("échec du run live (topic=%r, steps=%r)", topic, steps)
         yield {
             "node": None,
             "status": "aborted",
-            "step_count": state.step_count,
-            "artifacts": dict(state.artifacts),
+            "step_count": last["step_count"],
+            "artifacts": last["artifacts"],
             "stop_reason": "llm_error",
-            "log": list(state.log),
+            "log": last["log"],
+        }
+        return
+
+    # LangGraph ne conserve pas les changements d'état faits dans `route_from_state`
+    # (fonction de routage) : un chemin qui s'arrête sans clôture (ex. FINALIZE non demandé)
+    # laisse le dernier chunk "pending" au lieu de "aborted"/"missing_closure", contrairement
+    # au chemin déterministe (`run_scenario`). Rattrapé ici plutôt que dans graph.py (contrainte
+    # du plan : aucun changement à graph.py/runner.py/orchestrator.py).
+    if last["status"] not in ("done", "aborted"):
+        yield {
+            **last,
+            "node": None,
+            "status": "aborted",
+            "stop_reason": "missing_closure",
         }

@@ -78,6 +78,26 @@ def test_stream_live_llm_failure_yields_llm_error_instead_of_raising():
     assert chunks[-1]["stop_reason"] == "llm_error"
 
 
+def test_stream_live_credential_error_before_streaming_yields_llm_error(monkeypatch):
+    def _raise():
+        raise RuntimeError("variables d'environnement manquantes")
+
+    monkeypatch.setattr(runners, "build_llm", _raise)
+    chunks = list(runners.stream_live("sujet", ["RESEARCH"], max_steps=5))
+
+    assert len(chunks) == 1
+    assert chunks[0]["status"] == "aborted"
+    assert chunks[0]["stop_reason"] == "llm_error"
+
+
+def test_stream_live_missing_finalize_is_reported_not_silently_pending():
+    fake = _FakeLLM()
+    chunks = list(runners.stream_live("sujet", ["RESEARCH"], llm=fake, max_steps=5))
+
+    assert chunks[-1]["status"] == "aborted"
+    assert chunks[-1]["stop_reason"] == "missing_closure"
+
+
 def test_run_guardrail_role_violation():
     result = runners.run_guardrail("role_violation")
     assert result["status"] == "aborted"
