@@ -1,5 +1,4 @@
 """Exécution de bout en bout des scénarios fournis."""
-
 import json
 from pathlib import Path
 

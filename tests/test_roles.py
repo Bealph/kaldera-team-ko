@@ -1,5 +1,4 @@
 """Frontières et rôles des sous-agents."""
-
 from kaldera.agents.finalizer import Finalizer
 from kaldera.agents.researcher import Researcher
 from kaldera.agents.reviewer import Reviewer

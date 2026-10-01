@@ -1,5 +1,4 @@
 """Traçabilité des logs et budget de tokens par agent."""
-
 import pytest
 
 from kaldera import logging_utils

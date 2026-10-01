@@ -1,5 +1,4 @@
 """Résolution des étapes depuis les libellés de scénario."""
-
 from kaldera.steps import Step, step_from_name
 
 
