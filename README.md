@@ -57,9 +57,10 @@ make down       # stoppe le service docker
 
 Les trois limites connues de la PR précédente sont résolues :
 
-- Le chemin « live » (`graph.py`, LangGraph) câble un flux réel : mêmes garde-fous que le
-  runner déterministe (rôle, budget, limite d'étapes, clôture par le finalizer), un vrai appel
-  LLM par étape. Voir `run_live()` et `tests/test_graph.py`.
+- Le chemin « live » (`graph.py`, LangGraph) câble un flux réel et passe par **le même chef**
+  que le runner déterministe (`runner.py` : `prepare`, `chef_decide`, `chef_turn`) : rôle, budget,
+  limite d'étapes, réception, relance unique, annulation d'un passage refusé, clôture par le
+  finalizer. Un vrai appel LLM par étape. Voir `run_live()` et `tests/test_graph.py`.
 - Un vrai LLM est testé (`tests/test_graph.py::test_run_live_completes_with_a_real_llm`,
   se saute si `AZURE_AI_ENDPOINT`/`AZURE_AI_API_KEY`/`AZURE_AI_MODEL` sont absents).
 - `max_steps` est lu dans la demande (`initial_context`) en priorité, conformément à
