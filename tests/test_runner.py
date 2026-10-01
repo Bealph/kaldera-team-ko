@@ -1,4 +1,5 @@
 """Chargement du contexte et garde-fou de budget d'étapes."""
+
 from kaldera.runner import load_context, run_scenario
 from kaldera.state import TeamState
 from kaldera.steps import Step
@@ -30,7 +31,7 @@ def test_step_budget_is_enforced():
     state = TeamState(topic="x", required_steps=[Step.RESEARCH])
     result = run_scenario(
         scenario={},
-        max_iterations=3,
+        max_iterations=3,  # ==> on force un max de 3 itérations
         agents_by_name={"researcher": _StuckAgent()},
         initial_state=state,
     )

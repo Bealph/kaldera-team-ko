@@ -189,13 +189,14 @@ flowchart TD
     CONFIE --> AGENT("l'agent lit ce qu'il faut,<br/>écrit son résultat,<br/>rend la main"):::chaine
     AGENT --> JOURNAL[("journal : agent,<br/>étape, action")]:::obs
     JOURNAL --> RECEP{{"le chef réceptionne<br/>le bon résultat est-il écrit,<br/>et rien d'autre ?"}}:::pilot
-    RECEP -- "conforme" --> SUIVANT("avance à l'étape suivante<br/>jamais la même"):::data
+    RECEP -- "conforme" --> SUIVANT("avance à l'étape suivante"):::data
     SUIVANT --> B
   end
 
   RECEP -- "hors rôle" --> X2("Arrêt<br/>rôle non respecté"):::gate
   RECEP -- "budget dépassé" --> X3("Arrêt<br/>budget dépassé"):::gate
-  RECEP -- "résultat non conforme" --> X4("Arrêt<br/>réception refusée"):::gate
+  RECEP -- "non conforme, 1re fois :<br/>une seule relance" --> CONFIE
+  RECEP -- "non conforme, 2e fois" --> X4("Arrêt<br/>réception refusée"):::gate
   CONFIE -- "limite d'étapes atteinte" --> X5("Arrêt<br/>limite atteinte"):::gate
 
   B -- "non" --> C
@@ -232,7 +233,7 @@ flowchart TD
 ```
 
 Le flux se déroule en trois temps. Avant de démarrer, le chef vérifie la demande (étapes valides,
-`FINALIZE` en dernier, pas de doublon) ; une demande invalide ne démarre pas. Pendant, une étape à la
+pas de doublon, entrées présentes) ; une demande invalide ne démarre pas. Pendant, une étape à la
 fois, dans l'ordre demandé, avec un budget de jetons par agent. À la fin, seul le `Finalizer` fait
 passer le statut à `done`.
 
@@ -247,7 +248,7 @@ vers le même agent. Soit le flux avance, soit il s'arrête en `aborted` avec un
 
 La demande contient quatre étapes : `RESEARCH`, `DRAFT`, `REVIEW`, `FINALIZE`.
 
-1. Le chef vérifie la demande : quatre étapes valides, `FINALIZE` en dernier, pas de doublon. Elle
+1. Le chef vérifie la demande : quatre étapes valides, pas de doublon, entrées présentes. Elle
    passe.
 2. `RESEARCH` part vers le `Researcher`, qui écrit l'artefact `research`. Le chef réceptionne, fait
    avancer.
@@ -258,7 +259,8 @@ La demande contient quatre étapes : `RESEARCH`, `DRAFT`, `REVIEW`, `FINALIZE`.
 5. `FINALIZE` part vers le `Finalizer`, qui construit `final` à partir de `review` (`finalizer.py`),
    et passe le statut à `done`. Le chef répond `END`.
 
-À aucun moment un agent ne reçoit deux fois la même étape, et à aucun moment un artefact n'est écrit
+À aucun moment un agent ne reçoit deux fois la même étape (la seule exception serait une relance
+unique après un résultat non conforme, qui n'arrive pas dans ce scénario), et à aucun moment un artefact n'est écrit
 par quelqu'un d'autre que son propriétaire. C'est ce parcours exact que les tests reproduisent pour
 vérifier que la correction tient.
 

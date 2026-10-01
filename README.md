@@ -16,7 +16,9 @@ Orchestrateur d'une équipe d'agents LLM (`researcher`, `writer`, `reviewer`,
 
 - Python 3.11 (uv)
 - LangChain / langchain-core 0.3.x
-- langchain-azure-ai 0.1.x (Kimi-K2.6)
+- langchain-openai 0.3.x (appel réel, endpoint Azure AI compatible OpenAI)
+- langchain-azure-ai 0.1.x (déclaré, non utilisé : cible l'API azure-ai-inference,
+  incompatible avec l'endpoint `/openai/v1` fourni)
 - LangGraph 0.2.x
 - pytest 8.x
 
@@ -53,10 +55,49 @@ make down       # stoppe le service docker
 
 ## Known issues
 
-- L'orchestration et le routage présentent encore des comportements à fiabiliser
-  sur certains scénarios ; le rejeu via `scenarios/` reste la référence de comportement.
-- Les garde-fous d'exécution (budget d'étapes, budget de tokens, journalisation)
-  demandent une passe de validation supplémentaire avant un usage réel.
+Les trois limites connues de la PR précédente sont résolues :
+
+- Le chemin « live » (`graph.py`, LangGraph) câble un flux réel : mêmes garde-fous que le
+  runner déterministe (rôle, budget, limite d'étapes, clôture par le finalizer), un vrai appel
+  LLM par étape. Voir `run_live()` et `tests/test_graph.py`.
+- Un vrai LLM est testé (`tests/test_graph.py::test_run_live_completes_with_a_real_llm`,
+  se saute si `AZURE_AI_ENDPOINT`/`AZURE_AI_API_KEY`/`AZURE_AI_MODEL` sont absents).
+- `max_steps` est lu dans la demande (`initial_context`) en priorité, conformément à
+  `specs/flow_spec.md`, avec repli sur `expected` puis sur une limite par défaut — sans modifier
+  les scénarios fournis.
+
+Reste ouvert : le budget de tokens reste un coût fixe par étape (`step_cost`), pas un compte
+réel des tokens consommés par le LLM.
+
+Les boucles, le conflit sur `REVIEW` et les garde-fous ont été corrigés : voir
+`doc/developpement/choix_de_developpement.md`. Pour prouver que chaque défaut corrigé serait
+détecté s'il revenait : `uv run python scripts/grille_de_preuve.py`.
+
+## GUI de démo
+
+Une GUI Gradio pédagogique (déterministe / vrai LLM / casser un garde-fou / comparer les deux)
+tourne en local et sur Azure Container Apps.
+
+**En local :**
+
+```bash
+make webapp
+# ou, sans passer par le Makefile :
+uv sync --extra webapp
+uv run python -m kaldera.webapp.app
+```
+
+Ouvre `http://localhost:7860`.
+
+**En production :** `<URL Azure Container Apps — à renseigner après le premier déploiement, voir
+doc/guides/deploiement_azure_portail.md>`. Démarrage à froid possible (scale-to-zero) : ouvrir
+l'URL une minute avant une démo.
+
+**Déployer/relire l'infrastructure :**
+- `doc/guides/deploiement_azure_portail.md` — créer les ressources Azure (portail, pas à pas).
+- `doc/guides/github_actions_azure_oidc_portail.md` — connecter la CI à Azure sans secret
+  longue durée.
+- `.github/workflows/ci-cd.yml` — tests sur chaque PR, build + déploiement automatique sur `main`.
 
 ## License
 

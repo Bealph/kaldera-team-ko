@@ -1,6 +1,6 @@
 %%{init: {"theme": "base", "themeVariables": {"fontFamily": "Arial", "fontSize": "15px", "lineColor": "#5B6275", "edgeLabelBackground": "#FFFFFF"}, "flowchart": {"wrappingWidth": 420}}}%%
 flowchart TD
-  A(["Demande<br/>sujet + étapes"]):::io --> V{{"<b>A · Avant</b> · le chef vérifie la demande<br/>sujet, libellés, doublons, FINALIZE en dernier,<br/>entrées, nombre d'étapes, équipe complète"}}:::orch
+  A(["Demande<br/>sujet + étapes"]):::io --> V{{"<b>A · Avant</b> · le chef vérifie la demande<br/>sujet, libellés, doublons,<br/>entrées, nombre d'étapes, équipe complète"}}:::orch
   V -- "valide" --> G{"<b>B · Pendant</b><br/>reste-t-il<br/>une étape ?"}:::orch
   G -- "oui" --> D["le chef confie l'étape courante<br/>à son <b>unique propriétaire</b><br/>(garde-fou : limite d'étapes vérifiée avant)"]:::orch
   D -- "limite atteinte" --> X5["aborted<br/>step_limit_reached"]:::stop
@@ -18,8 +18,9 @@ flowchart TD
 
   RC -- "étape hors rôle" --> X2["aborted<br/>role_violation"]:::stop
   RC -- "budget dépassé" --> X3["aborted<br/>budget_exceeded"]:::stop
-  RC -- "artefact non conforme" --> X4["aborted<br/>reception_refused"]:::stop
-  RC -- "conforme" --> AV["le chef avance à l'étape suivante<br/>jamais la même"]:::orch
+  RC -- "non conforme, 2e fois" --> X4["aborted<br/>reception_refused"]:::stop
+  RC -- "conforme" --> AV["le chef avance à l'étape suivante"]:::orch
+  RC -- "non conforme, 1re fois :<br/>relance unique" --> D
   AV --> G
 
   G -- "non" --> E{"<b>C · À la fin</b><br/>clos par le<br/>finalizer ?"}:::orch
@@ -27,7 +28,7 @@ flowchart TD
   E -- "non" --> X6["aborted<br/>missing_closure"]:::stop
   V -- "échec" --> X1["aborted<br/>invalid_demand + motif"]:::stop
 
-  REG["<b>Règles de l'orchestration cible</b><br/>1 · une étape, un seul agent · 2 · un artefact, un seul propriétaire ; done réservé au finalizer<br/>3 · le rôle est déclaré une seule fois : table, refus, réception et prompt en découlent<br/>4 · chaque sub-agent rend la main au chef : aucun transfert d'agent à agent<br/>5 · aucune relance : tout arrêt est définitif, avec son code<br/>6 · journal : qui, quelle étape, quoi, pour chaque agent et chaque décision du chef"]:::note
+  REG["<b>Règles de l'orchestration cible</b><br/>1 · une étape, un seul agent · 2 · un artefact, un seul propriétaire ; done réservé au finalizer<br/>3 · le rôle est déclaré une seule fois : table, refus, réception et prompt en découlent<br/>4 · chaque sub-agent rend la main au chef : aucun transfert d'agent à agent<br/>5 · une seule relance, après une réception refusée ; tout autre arrêt est immédiat, avec son code<br/>6 · journal : qui, quelle étape, quoi, pour chaque agent et chaque décision du chef"]:::note
   LEG["<b>Légende</b> · violet : le chef (superviseur) · vert : un sub-agent · rouge : arrêt aborted · vert clair : fin normale"]:::note
   X4 ~~~ REG
   REG ~~~ LEG

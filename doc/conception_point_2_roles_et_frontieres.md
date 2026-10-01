@@ -2,6 +2,17 @@
 
 Brief Kaldera · Phase CONCEPTION, point 2 · 29/09/2026 · Code étudié : commit `37c2cb3`
 
+
+> **Mise à jour du 30/09/2026 · décisions validées.** Deux décisions ont changé à la validation :
+> **D3**, une réception refusée donne droit à une relance unique, journalisée, avant l'arrêt ; et
+> **D5**, `FINALIZE` n'est plus exigé au départ : une fin sans clôture s'arrête en
+> `missing_closure`. Cette note est corrigée en conséquence. La liste complète est dans
+> `livrable_conception/note_diagnostic_et_schema_cible.md`, section 5.
+>
+> **Complément du Développement.** La revue du code a ajouté des garde-fous : un passage refusé
+> est **annulé** (ses écritures sont retirées de l'état et gardées au registre comme incomplètes) ;
+> nouveaux motifs de refus `finalize_not_last`, `state_not_fresh` et `invalid_limit` ; nouveau
+> code d'arrêt `agent_error`. Détail dans `doc/developpement/choix_de_developpement.md`.
 ---
 
 ## La réponse en bref
@@ -17,7 +28,7 @@ Trois règles rendent ces frontières solides :
 3. **le rôle est déclaré à un seul endroit**.
 
 Le chef, lui, ne produit rien. Il confie l'étape, **vérifie ce qu'on lui rend**, puis fait avancer
-le flux ou l'arrête. Il ne relance jamais.
+le flux ou l'arrête. Il relance au plus une fois, et seulement après une réception refusée.
 
 ---
 
@@ -60,8 +71,8 @@ réception** avant de passer à la suite.
 **Changement par rapport au code actuel.** Aujourd'hui, c'est l'agent qui fait avancer l'étape
 (`agents/base.py:44`), et le chef ne vérifie rien. Au point 1, on a vu que la boucle naît
 justement là : un agent qui n'avance pas, sans que le chef s'en aperçoive. Désormais, le chef
-réceptionne, puis avance ou arrête. Il ne relance jamais. La boucle « le chef redonne la même
-tâche » n'a donc plus de chemin.
+réceptionne, puis avance, relance une fois après un refus, ou arrête. La boucle « le chef redonne la
+même tâche » est donc bornée à deux passages.
 
 La fin normale du flux (limite `max_steps`, clôture par le finalizer, `END`) relève du point 3.
 
@@ -119,22 +130,25 @@ construction**, au lieu de devoir être repérée.
 
 Trois situations franchissent une frontière. Le chef y répond toujours de la même façon : il
 **arrête le flux**, avec le statut `aborted` (déjà prévu par le code, `runner.py:41`) et la
-**raison nommée**. Il ne relance pas et ne tente pas un autre agent.
+**raison nommée**. Il ne tente jamais un autre agent. Seule la réception refusée donne droit à une
+relance unique, journalisée ; au second refus, le flux s'arrête.
 
-| Situation                                                        | Raison nommée      | Artefact partiel               |
-| ---------------------------------------------------------------- | ------------------ | ------------------------------ |
-| L'agent reçoit une étape hors de son rôle                        | refus hors du rôle | aucun, l'agent n'a rien écrit  |
-| L'agent dépasse son budget de tokens                             | budget dépassé     | conservé mais marqué incomplet |
-| À la réception, l'artefact manque, ou un autre artefact a changé | réception refusée  | conservé mais marqué incomplet |
+| Situation                                                        | Raison nommée                        | Artefact partiel                                      |
+| ---------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| L'agent reçoit une étape hors de son rôle                        | refus hors du rôle                   | aucun, l'agent n'a rien écrit                         |
+| L'agent dépasse son budget de tokens                             | budget dépassé                       | aucun, l'agent s'arrête avant d'écrire                |
+| À la réception, l'artefact manque, ou un autre artefact a changé | réception refusée, après une relance | annulé dans l'état, gardé au registre comme incomplet |
 
 **Pourquoi arrêter plutôt que réessayer.** La table étant fixe, chacune de ces situations signale
 une erreur réelle. Réessayer la masquerait et recréerait la boucle du point 1. Essayer un autre
-agent recréerait le « renvoi de balle ».
+agent recréerait le « renvoi de balle ». *Exception validée le 30/09/2026 (D3)* : une réception refusée
+donne droit à une relance, car un agent branché sur un vrai LLM peut échouer ponctuellement ; les deux
+autres situations se reproduiraient à l'identique.
 
 **Pas de transfert d'agent à agent.** Chaque agent rend la main au chef : c'est notre distinction
 « rendre la main » (sub-agent) contre « passer la main » (transfert). Le ping-pong **direct** entre
 deux agents devient impossible. Le ping-pong **par le chef**, celui du point 1, est fermé à son tour
-par la règle « le chef ne relance jamais ».
+par la règle « au plus une relance, et seulement après un refus ».
 
 À noter : aujourd'hui, le budget de tokens est additionné mais jamais comparé
 (`agents/base.py:39-40`). La deuxième ligne du tableau suppose donc que cette comparaison soit
@@ -144,15 +158,15 @@ ajoutée.
 
 ## 5. Ce que ces rôles corrigent du point 1
 
-| Défaut constaté au point 1                              | Ce qui le corrige                                                      |
-| ------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `REVIEW` revendiquée par deux agents, confiée au writer | Règles 1 et 3                                                          |
-| Le writer accepte toutes les étapes                     | Règle 3 et refus effectif (section 4)                                  |
-| Le writer réécrit son brouillon à l'étape `REVIEW`      | Règle 2, tenue par la réception du chef                                |
-| Le finalizer absent de l'équipe                         | Règle 1 : aucune étape sans propriétaire                               |
-| Writer et researcher ont la même description            | Fiches de poste distinctes (section 1)                                 |
-| Le chef passe lui-même le statut à `done`               | Règle 2 : ce statut est réservé au finalizer                           |
-| Un agent bloqué est relancé sans fin                    | Réception par le chef, puis arrêt, jamais de relance (sections 2 et 4) |
+| Défaut constaté au point 1                              | Ce qui le corrige                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `REVIEW` revendiquée par deux agents, confiée au writer | Règles 1 et 3                                                            |
+| Le writer accepte toutes les étapes                     | Règle 3 et refus effectif (section 4)                                    |
+| Le writer réécrit son brouillon à l'étape `REVIEW`      | Règle 2, tenue par la réception du chef                                  |
+| Le finalizer absent de l'équipe                         | Règle 1 : aucune étape sans propriétaire                                 |
+| Writer et researcher ont la même description            | Fiches de poste distinctes (section 1)                                   |
+| Le chef passe lui-même le statut à `done`               | Règle 2 : ce statut est réservé au finalizer                             |
+| Un agent bloqué est relancé sans fin                    | Réception par le chef, une relance au plus, puis arrêt (sections 2 et 4) |
 
 Restent pour le point 3 : la limite `max_steps` lue enfin, la fin de flux explicite et la lecture de
 la demande. Pour vérifier « qui a fait quoi », le journal devra aussi enregistrer le nom de l'agent.
@@ -177,8 +191,8 @@ l'arrêt de la section 4 : ce sera le point 4.
    - *L'autre option* était un aller-retour rédacteur-relecteur (évaluateur-optimiseur). Elle
      ajouterait un chemin de retour, donc un risque de boucle, que la spécification ne demande pas.
 2. **L'avancement de l'étape passe de l'agent au chef**, après réception.
-3. **Toute frontière franchie arrête le flux** (statut `aborted`, raison nommée). Aucune relance,
-   aucun autre agent.
+3. **Toute frontière franchie arrête le flux** (statut `aborted`, raison nommée), sans jamais tenter
+   un autre agent. Seule une réception refusée donne droit à une relance unique (validé le 30/09/2026).
 4. **La composition de l'équipe est vérifiée avant le lancement** : chaque étape a exactement un
    propriétaire. La spécification ne le demande pas, mais c'est la règle 1 appliquée au plus tôt.
 
