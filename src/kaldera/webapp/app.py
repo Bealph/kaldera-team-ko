@@ -33,6 +33,10 @@ def on_run_deterministic(topic: str, steps: list[str]) -> dict:
     return runners.run_deterministic(topic, _canonical_order(steps))
 
 
+def on_run_scenario(scenario_id: str) -> dict:
+    return runners.run_named_scenario(scenario_id)
+
+
 def on_run_guardrail(defect: str) -> dict:
     return runners.run_guardrail(defect)
 
@@ -75,6 +79,11 @@ def _run_deterministic_ui(topic: str, steps: list[str]) -> tuple[str, dict]:
     return _format_summary(result), result["artifacts"]
 
 
+def _run_scenario_ui(scenario_id: str) -> tuple[str, dict]:
+    result = on_run_scenario(scenario_id)
+    return _format_summary(result), result["artifacts"]
+
+
 def _run_live_ui(topic: str, steps: list[str]):
     log_lines: list[str] = []
     artifacts: dict = {}
@@ -101,11 +110,22 @@ def build_app() -> gr.Blocks:
             with gr.Row():
                 det_button = gr.Button("Lancer (déterministe)")
                 live_button = gr.Button("Lancer (vrai LLM)")
+
+            scenario_ids = [s["id"] for s in runners.load_scenarios()]
+            with gr.Row():
+                scenario_dropdown = gr.Dropdown(
+                    choices=scenario_ids,
+                    value=scenario_ids[0] if scenario_ids else None,
+                    label="Scénario prédéfini (scenarios/scenarios_test.json)",
+                )
+                scenario_button = gr.Button("Lancer le scénario")
+
             output_log = gr.Textbox(label="Déroulé", lines=10)
             output_artifacts = gr.JSON(label="Artefacts")
 
             det_button.click(_run_deterministic_ui, [topic_box, steps_box], [output_log, output_artifacts])
             live_button.click(_run_live_ui, [topic_box, steps_box], [output_log, output_artifacts])
+            scenario_button.click(_run_scenario_ui, [scenario_dropdown], [output_log, output_artifacts])
 
         with gr.Tab("Casser un garde-fou"):
             gr.Markdown("Toujours déterministe : gratuit, instantané, rejouable à l'infini.")

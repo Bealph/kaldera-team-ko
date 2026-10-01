@@ -3,8 +3,10 @@ testables sans lancer de serveur). Zéro changement à runner.py/graph.py/orches
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterator
+from pathlib import Path
 
 from ..graph import HARD_CAP, build_graph
 from ..llm import build_llm
@@ -15,6 +17,7 @@ from ..steps import step_from_name
 from . import broken_registries
 
 _logger = logging.getLogger(__name__)
+_SCENARIOS_PATH = Path(__file__).resolve().parents[3] / "scenarios" / "scenarios_test.json"
 
 
 def _summarize(state: TeamState) -> dict:
@@ -30,6 +33,16 @@ def _summarize(state: TeamState) -> dict:
 def run_deterministic(topic: str, steps: list[str]) -> dict:
     scenario = {"initial_context": {"topic": topic, "required_steps": steps}}
     state = run_scenario(scenario)
+    return _summarize(state)
+
+
+def load_scenarios() -> list[dict]:
+    return json.loads(_SCENARIOS_PATH.read_text())["scenarios"]
+
+
+def run_named_scenario(scenario_id: str) -> dict:
+    scenarios = {s["id"]: s for s in load_scenarios()}
+    state = run_scenario(scenarios[scenario_id])
     return _summarize(state)
 
 
